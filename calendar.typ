@@ -621,7 +621,6 @@
 #if "daily" in config.include {
     for day in calendar.flatten().filter(day => day.name == day.month) {
 	[#daily-page(day)]
-	break
     }
 }
 
@@ -678,7 +677,6 @@
 #if "reflections" in config.include {
     for day in calendar.flatten().filter(day => day.name == day.month) {
 	reflection-page(day)
-	break
     }
 }
 
@@ -722,7 +720,6 @@
 #if "daily" in config.include {
     for day in calendar.flatten().filter(day => day.name == day.month) {
 	[#daily-note-page(day)]
-	break
     }
 }
 
