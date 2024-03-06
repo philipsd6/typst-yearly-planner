@@ -1,0 +1,29 @@
+---
+debug: false
+clear-top-right-corner: true
+# Remarkable2 screen dimensions: 1872 x 1404 resolution (226 DPI)
+height: 1872 * 1in / 226
+width: 1404 * 1in / 226
+toolbar-side: left
+toolbar-width: 11.8mm
+font: Literata
+fontsize: 8pt
+margin: 2mm
+# top-margin must be larger to accommodate the header
+top-margin: 5em
+daily-start-hour: 8
+include:
+  # - title
+  - annual
+  - quarterly
+  - monthly
+  - weekly
+  - daily
+  - reflections
+  # - notes
+# No more than 5!
+reflection-prompts:
+  - What good habits did I practice today?
+  - What do I want to remember most about today?
+  - What accomplishment am I proud of today?
+reflection-prompt-lines: 4
