@@ -1,14 +1,19 @@
-#import "@preview/tablex:0.0.8": tablex, gridx, hlinex, vlinex, colspanx, rowspanx, cellx
-
 /*
 ** Configuration
 */
 #let config = yaml("config.yaml")
-#let margin = eval(config.margin)
-#let top-margin = eval(config.top-margin)
-#let height = eval(config.height)
-#let width = eval(config.width)
-#let fontsize = eval(config.fontsize)
+#(config.height = eval(config.height))
+#(config.width = eval(config.width))
+#(config.toolbar-width = eval(config.toolbar-width))
+#(config.fontsize = eval(config.fontsize))
+#(config.margin = eval(config.margin))
+#(config.top-margin = eval(config.top-margin))
+
+#let hairline = 0.5pt
+#let ruleline = hairline + gray
+#let borderline = hairline + black
+
+#set pagebreak(weak: true)
 
 
 // TODO: this should take parameters for calendar, holidays, and events files.
@@ -27,27 +32,25 @@
 #let monthnames = calendar.map(month => month.first().name)
 #let weekdays = calendar.first().map(day => day.weekday).slice(0, count: 7)
 
-#set pagebreak(weak: true)
-
 /*
 ** Page Layout / Base Style
 */
 #set text(
     font: config.font,
-    size: fontsize,
+    size: config.fontsize,
     weight: "light",
     // number-type: "old-style",
 )
 
 #set page(
-    height: height,
-    width: width,
+    height: config.height,
+    width: config.width,
     margin: if config.toolbar-side == "left" {
-     	(left: margin + eval(config.toolbar-width), top: top-margin, rest: margin)
+	(left: config.margin + config.toolbar-width, top: config.top-margin, rest: config.margin)
     } else {
-	(right: margin + eval(config.toolbar-width), top: top-margin, rest: margin)
+	(right: config.margin + config.toolbar-width, top: config.top-margin, rest: config.margin)
     },
-    header-ascent: margin
+    header-ascent: config.margin
 )
 
 
@@ -88,41 +91,38 @@
 })
 #let sideways = rotatex.with(-90deg)
 
-// Create a "button" with active:true/false to control highlighting.
-#let button(txt, loc, active: false, size: 1.2em, inset: 5pt) = {
-    let button-box = box.with(inset: inset)
-    let button-text = text.with(size: size)
-    let this-button = if active {
-	button-box(fill: black, button-text(fill: white)[#txt])
-    } else {
-	button-box(button-text()[#txt])
-    }
-    link(loc)[#this-button]
-}
 
-// This function expects a dictionary of text:link, and the optional text of
 // which one to highlight
-#let tab-list(items, current: (), vertical: false, rotate-text: false, inset: 5pt, bottom-border: false) = {
-    let cells = ()
-    for (txt, loc) in items {
-	if txt in current {
-	    cells.push(button(txt, loc, active: true, inset: inset))
-	} else {
-	    cells.push(button(txt, loc, inset: inset))
-	}
-    }
-    let args = (stroke: 0.5pt+if config.debug { aqua }, auto-lines: config.debug, inset: 0pt, columns: items.len())
+#let tab-list(items, current: (), vertical: false, rotate-text: false, inset: 5pt, ..grid-args) = {
+    set text(size: 1.2em)
+    let cells = items.pairs().map(
+	((txt, loc)) => (
+	    if txt in current {
+		link(loc)[#grid.cell(fill: black, inset:inset, text(fill: luma(200))[#txt])] // why is the cell fill ignored???
+	    } else {
+		link(loc)[#grid.cell(inset: inset)[#txt]]
+	    }
+	)
+    )
+
+    let args = grid-args.named() + (inset: 0pt, columns: cells.len())
     if vertical {
 	args.columns = 1
-	args.rows = items.len()
+	args.rows = cells.len()
     }
     if rotate-text {
-	gridx(..args, ..cells.map(sideways).intersperse(hlinex()), if bottom-border { vlinex(expand: 2pt) })
+	grid(..args, ..cells.map(sideways))
     } else {
-	gridx(..args, ..cells.intersperse(vlinex()), if bottom-border { hlinex(expand: 2pt) })
+	grid(..args, ..cells)
     }
 }
-#let vtab-list=tab-list.with(vertical: true, rotate-text: true, inset: (left: 9pt, right: 9pt, rest: 10pt), bottom-border: true)
+#let htab-list = tab-list.with(stroke: (x, y) => if x > 0 {(left: borderline)})
+#let vtab-list=tab-list.with(
+    vertical: true,
+    rotate-text: true,
+    inset: (left: 9pt, right: 9pt, rest: 10pt),
+    stroke: (x, y) => if y > 0 {(right: borderline, top: borderline)} else {(right: borderline)}
+)
 
 #let page-nav(title, lbl: none, prev: none, next: none, subtitle: none) = {
     let large = text.with(size: 2.8em)
@@ -134,27 +134,25 @@
 
     if prev != none {
 	cols += 1
-	cells.push(rowspanx(2)[#large()[#back(prev)]])
+	cells.push(grid.cell(rowspan:2, [#large()[#back(prev)]]))
     }
     if lbl == none {
 	lbl = labelize(title)
     }
-    cells.push(rowspanx(2)[#large()[#title #lbl]])
+    cells.push(grid.cell(rowspan: 2, [#large()[#title #lbl]]))
     if subtitle != none {
 	cols += 1
-	cells.push(vlinex(stroke: 0.75pt, gutter-restrict: right, expand: 4pt))
 	cells.push(small(weight: "semibold")[#align(top, subtitle.top)])
     }
     if next != none {
 	cols += 1
-	cells.push(rowspanx(2)[#large()[#forward(next)]])
+	cells.push(grid.cell(rowspan: 2, [#large()[#forward(next)]]))
     }
     if subtitle != none {
 	cells.push(small()[#align(bottom, subtitle.bottom)])
     }
 
-    return gridx(stroke: 0.5pt+if config.debug { aqua }, auto-lines: config.debug,
-	columns: cols, rows: 2, inset: (top: 0pt, bottom: 0pt, rest: 4pt), ..cells)
+    return grid(columns: cols, rows: 2, inset: (top: 0pt, bottom: 0pt, rest: 4pt), ..cells)
 }
 
 #let header(left-side, right-side) = {
@@ -169,7 +167,7 @@
 }
 
 #let sidebar(..sides) = {
-    let toolbar-width = eval(config.toolbar-width)
+    let toolbar-width = config.toolbar-width
     place(dx: - toolbar-width - 2mm,
 	stack(dir: ttb, spacing: 1fr,
 	    ..sides.pos()
@@ -216,6 +214,7 @@
     // Get the first day for convenience
     let d = month.first()
     set align(center)
+    set grid.cell(inset: 0.55em)
 
     if "monthly" in config.include {
 	link(labelize(d.year, d.name))[=== #d.name]
@@ -224,12 +223,11 @@
     }
     let weekday-letters = weekdays.map(it => it.first())
 
-    let cells = (hlinex(stroke: 0.75pt),)
+    let cells = ()
     if include-weeks {
-	cells += ("W", vlinex(stroke: 0.75pt, gutter-restrict: right, expand: (5pt, 1pt)))
+	cells += (grid.cell()[W],)
     }
     cells += weekday-letters
-    cells.push(hlinex(stroke: 0.75pt, gutter-restrict: bottom))
     // need to handle rolling over to week 1 in the next year!
     let prev_week = 0
     for (i, day) in month.enumerate() {
@@ -243,21 +241,21 @@
 		active = true
 	    }
 	    if "daily" in config.include {
-		cells.push(day.day)
+		cells.push(grid.cell()[#day.day])
 		// can't push links unless I create all the daily pages...
-		// cells.push(button(day.day, labelize(day.year, day.name, day.day), active: active, inset: 1pt))
+		// cells.push(link(labelize(day.year, day.name, day.day))[#grid.cell()[#day.day]])
 	    } else {
-		cells.push(day.day)
+		cells.push(grid.cell()[#day.day])
 	    }	
 	} else {
 	    cells.push(none)
 	}
     }
 
-    gridx(
-	gutter: -1pt,
+    grid(
 	columns: if include-weeks { 8 } else { 7 },
 	align: center,
+	stroke: (x, y) => if y == 0 {(top: borderline, bottom: borderline)} + if include-weeks and x == 0 {(right: borderline)},
 	..cells
     )
 }
@@ -289,7 +287,7 @@
     set page(
 	header: header(
 	    page-nav(title, lbl: labelize(fday.year)),
-	    tab-list(tabs, current: ("Calendar",))
+	    htab-list(tabs, current: ("Calendar",))
 	)
     )
 
@@ -327,7 +325,7 @@
     set page(
 	header: header(
 	    page-nav([#quarter], lbl: labelize(year, quarter)),
-	    tab-list(tabs)
+	    htab-list(tabs)
 	)
     )
 
@@ -342,12 +340,12 @@
 
 	locate(loc => [
 	    #let current_y = loc.position().y
-	    #let remaining_space = height - current_y - margin * 2 // can't subtract the top-margin because it's in em units...
-	    #let lines_num = int(remaining_space / fontsize / 2) + 1
+	    #let remaining_space = config.height - current_y - config.margin * 2 // can't subtract the top-margin because it's in em units...
+	    #let lines_num = int(remaining_space / config.fontsize / 2) + 1
 	    #for i in range(lines_num) {
 		linebreak()
 		linebreak()
-		box(line(length: 100%, stroke: 0.5pt + gray))
+		box(line(length: 100%, stroke: ruleline))
 	    }
 	])
     )
@@ -381,7 +379,7 @@
     set page(
 	header: header(
 	    page-nav(d.name, lbl: labelize(d.year, d.name)),
-	    tab-list(tabs, current: d.name)
+	    htab-list(tabs, current: d.name)
 	)
     )
 
@@ -390,52 +388,51 @@
 
     let cells = ()
     if "weekly" in config.include {
-	cells = (none, vlinex(stroke: 0.5pt, gutter-restrict: right, expand: (5pt, 1pt)))
+	cells = (none, )
     }
     cells += weekdays.map(w => {
-	cellx(align: top + center, w)
-    }).intersperse(
-	vlinex(stroke: 0.5pt, gutter-restrict: right, expand: (0pt, 1pt))
-    )
-    cells.push(hlinex(stroke: 0.5pt, gutter-restrict: bottom))
+	grid.cell(align: top + center, w)
+    })
 
+    let prev_week = 0
     for (i, day) in month.enumerate() {
 	if calc.rem(i, 7) == 0 and "weekly" in config.include {
-	    cells.push(cellx(align: left+horizon, sideways()[Week#hide[-]#day.week]))
+	    // cells.push(link(labelize(day.year + if day.week < prev_week { 1 } else { 0 }, "W" + str(day.week)))[#grid.cell(align: left+horizon, sideways()[Week#hide[-]#day.week])])
+	    cells.push(grid.cell(align: left + horizon, sideways()[#link(labelize(day.year + if day.week < prev_week { 1 } else { 0 }, "W" + str(day.week)))[Week#hide[-]#day.week]]))
+	    prev_week = day.week
 	}
-	cells.push(hlinex(stroke: 0.5pt))
 	if day.month == day.name {
-	    cells.push(cellx(day.day))
+	    cells.push(grid.cell()[#day.day])
 	} else {
-	    cells.push(cellx(text(gray)[#day.day]))
+	    cells.push(grid.cell(text(gray)[#day.day]))
 	}
     }
-    cells.push(hlinex(stroke: 0.75pt, gutter-restrict: bottom))
 
-    gridx(
+    grid(
 	inset:3pt,
 	gutter: -0pt,
 	columns: if "weekly" in config.include {(auto, ) + (1fr, ) * 7} else {(1fr, ) * 7},
 	rows: (auto, 10%),
 	align: top + left,
+	stroke: (x, y) => {(bottom: borderline)} + if x > 0 {(left: borderline)},
 	..cells
     )
 
     locate(loc => [
 	#let current_y = loc.position().y
-	#let remaining_space = height - current_y - margin * 2 // can't subtract the top-margin because it's in em units...
-	#let lines_num = int(remaining_space / fontsize / 2)
+	#let remaining_space = config.height - current_y - config.margin * 2 // can't subtract the top-margin because it's in em units...
+	#let lines_num = int(remaining_space / config.fontsize / 2)
 	#grid(
 	    columns: (1fr, 1fr),
 	    column-gutter: 6pt,
 	    for i in range(lines_num) {
 		linebreak()
-		box(line(length: 100%, stroke: 0.5pt + gray))
+		box(line(length: 100%, stroke: ruleline))
 		linebreak()
 	    },
 	    for i in range(lines_num) {
 		linebreak()
-		box(line(length: 100%, stroke: 0.5pt + gray))
+		box(line(length: 100%, stroke: ruleline))
 		linebreak()
 	    }
 	)
@@ -470,7 +467,7 @@
     set page(
 	header: header(
 	    page-nav([Week #d.week], lbl: labelize(d2.year, "W" + str(d.week))),
-	    tab-list(tabs, current: "Week" + str(d.week))
+	    htab-list(tabs, current: "Week" + str(d.week))
 	)
     )
 
@@ -490,20 +487,20 @@
     }
     main-sidebar(quarters: quarters, months: months)
 
-    gridx(columns: (1fr, ) * 3, inset: (bottom:8pt, rest: 1pt), column-gutter: 4pt, row-gutter: 0pt, rows: 1fr,
+    grid(columns: (1fr, ) * 3, inset: (bottom:8pt, rest: 1pt), column-gutter: 4pt, row-gutter: 0pt, rows: 1fr,
 	..week.map(d => {
 	    [#d.day. #d.weekday]
 	    box(line(length: 100%))
 	    for i in range(11) {
 		v(1fr)
-		line(length:100%, stroke: 0.5pt)
+		line(length:100%, stroke: ruleline)
 	    }
 	}),
-	colspanx(2)[
+	grid.cell(colspan: 2)[
 	    Notes #box(line(length: 100%))
 	    #for i in range(11) {
 		v(1fr)
-		line(length: 100%, stroke: 0.5pt)
+		line(length: 100%, stroke: ruleline)
 	    }
 	]
     )
@@ -542,7 +539,7 @@
     set page(
 	header: header(
 	    page-nav([#day.day], lbl: labelize(day.year, day.month, day.day), subtitle: (top: [#day.weekday], bottom: [#day.month])),
-	    tab-list(tabs)
+	    htab-list(tabs)
 	)
     )
 
@@ -566,10 +563,10 @@
 		#for i in range(13) {
 		    [#calc.rem((i + 8), 24)]
 		    linebreak()
-		    box(line(length: 100%, stroke: 0.5pt + gray))
+		    box(line(length: 100%, stroke: ruleline))
 		    linebreak()
 		    linebreak()
-		    box(line(length: 100%, stroke: 0.5pt))
+		    box(line(length: 100%, stroke: borderline))
 		    linebreak()
 		}
 		#linebreak()
@@ -583,32 +580,32 @@
 		#for i in range(8) {
 		    [#(i+1) ☐]
 		    linebreak()
-		    box(line(length: 100%, stroke: 0.5pt))
+		    box(line(length: 100%, stroke: ruleline))
 		}
 
 		#box(stack(spacing: 1fr, dir: ltr, [
-		    #box(width: 1fr, tab-list((
+		    #box(width: 1fr, htab-list((
 			Notes: "https://google.com",  // labelize(day.year, day.month, day.day),
 			Reflect: "https://google.com", // labelize(day.year, day.month, day.day, "Reflect")
 		    ), current: "Notes"))
-		    #box(tab-list((
+		    #box(htab-list((
 			"All Notes": "https://google.com",
 		    )))
 		]))
 		#box(line(length: 100%, stroke: 1pt))
 		#locate(loc => [
 		    #let current_y = loc.position().y
-		    #let remaining_space = height - current_y - margin * 2 // can't subtract the top-margin because it's in em units...
-		    #let lines_num = int(remaining_space / fontsize / 2)
+		    #let remaining_space = config.height - current_y - config.margin * 2 // can't subtract the top-margin because it's in em units...
+		    #let lines_num = int(remaining_space / config.fontsize / 2)
 		    #for i in range(lines_num) {
 			linebreak()
 			linebreak()
-			box(line(length: 100%, stroke: 0.5pt))
+			box(line(length: 100%, stroke: ruleline))
 		    }
 		    #v(1pt)
 		    #box(stack(spacing: 1fr, dir: ltr, [
-			#box(width: 1fr, line(length: 100%, stroke: 0.5pt))
-			#box(button("More...", "https://google.com", size: 1em, inset:0pt))
+			#box(width: 1fr, line(length: 100%, stroke: ruleline))
+			#link("https://example.com/Notes")[#box()[More...]]
 		    ]))
 		])
 	    ])
@@ -643,7 +640,7 @@
     set page(
 	header: header(
 	    page-nav([#day.day], lbl: labelize(day.year, day.month, day.day, "Reflection"), subtitle: (top: [#day.weekday], bottom: [#day.month])),
-	    tab-list(tabs)
+	    htab-list(tabs)
 	)
     )
 
@@ -655,7 +652,7 @@
 	for i in range(config.reflection-prompt-lines) {
 	    linebreak()
 	    linebreak()
-	    box(line(length: 100%, stroke: 0.5pt + gray))
+	    box(line(length: 100%, stroke: ruleline))
 	}
 	v(0pt)
     }
@@ -663,12 +660,12 @@
     box(line(length: 100%, stroke: 1pt))
     locate(loc => [
 	#let current_y = loc.position().y
-	#let remaining_space = height - current_y - margin * 2 // can't subtract the top-margin because it's in em units...
-	#let lines_num = int(remaining_space / fontsize / 2) + 1
+	#let remaining_space = config.height - current_y - config.margin * 2 // can't subtract the top-margin because it's in em units...
+	#let lines_num = int(remaining_space / config.fontsize / 2) + 1
 	#for i in range(lines_num) {
 	    linebreak()
 	    linebreak()
-	    box(line(length: 100%, stroke: 0.5pt + gray))
+	    box(line(length: 100%, stroke: ruleline))
 	}])
 
         pagebreak()
@@ -698,7 +695,7 @@
     set page(
 	header: header(
 	    page-nav([#day.day], lbl: labelize(day.year, day.month, day.day, "Notes"), subtitle: (top: [#day.weekday], bottom: [#day.month])),
-	    tab-list(tabs)
+	    htab-list(tabs)
 	)
     )
 
@@ -706,12 +703,12 @@
 
     locate(loc => [
 	#let current_y = loc.position().y
-	#let remaining_space = height - current_y - margin * 2 // can't subtract the top-margin because it's in em units...
-	#let lines_num = int(remaining_space / fontsize / 2) + 1
+	#let remaining_space = config.height - current_y - config.margin * 2 // can't subtract the top-margin because it's in em units...
+	#let lines_num = int(remaining_space / config.fontsize / 2) + 1
 	#for i in range(lines_num) {
 	    linebreak()
 	    linebreak()
-	    box(line(length: 100%, stroke: 0.5pt + gray))
+	    box(line(length: 100%, stroke: ruleline))
 	}])
 
         pagebreak()
