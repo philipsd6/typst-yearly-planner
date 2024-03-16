@@ -20,7 +20,7 @@ include:
   - weekly
   - daily
   - reflections
-  # - notes
+#  - notes
 # No more than 5!
 reflection-prompts:
   - What good habits did I practice today?
