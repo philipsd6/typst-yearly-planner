@@ -13,14 +13,15 @@ margin: 2mm
 top-margin: 5em
 daily-start-hour: 8
 include:
-  # - title
+  - title
   - annual
   - quarterly
   - monthly
   - weekly
   - daily
   - reflections
-#  - notes
+  - notes
+note-index-pages: 3
 # No more than 5!
 reflection-prompts:
   - What good habits did I practice today?

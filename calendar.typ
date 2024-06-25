@@ -16,7 +16,6 @@
 
 #set pagebreak(weak: true)
 
-
 // TODO: this should take parameters for calendar, holidays, and events files.
 // --input events=events.yaml --input holidays=holidays.yaml
 // access as sys.inputs.<events|holidays>
@@ -59,23 +58,9 @@
 ** Utility functions
 */
 
-// dict constructor, ala Python
-// See: https://github.com/typst/typst/pull/3383
-#let from-pairs(pairs) = {
-  for (k, v) in pairs {
-    ((k): v)
-  }
-}
-
-#let chunker(arr, sz) = {
-    return range(0, arr.len(), step: sz).map(pos => {
-	arr.slice(pos, count: sz)
-    })
-}
-
 // Return a label based on the items given
 #let labelize(..items) = {
-    let key = items.pos().map(str).join()
+    let key = items.pos().filter(it => {it != none}).map(str).join("-")
     return label(key)
 }
 
@@ -130,7 +115,7 @@
 	box(width: 8mm)
     }
     v(0pt) // (zero vspace still takes up more than without it!)
-    box(heavyline()) 
+    box(heavyline())
 }
 
 
@@ -158,9 +143,11 @@
 
 #let topbar(size: 1.2em, ..tabs) = {
     tabs = tabs.pos().filter(t => t != none)
-    return text(size: size, grid(columns: tabs.len(), stroke: (x, y) => if x > 0 {(left: border)},
-	..tabs
-    ))
+    if tabs.len() > 0 {
+	return text(size: size, grid(columns: tabs.len(), stroke: (x, y) => if x > 0 {(left: border)},
+	    ..tabs
+	))
+    }
 }
 
 #let sidebar(active-tabs: ()) = {
@@ -181,23 +168,27 @@
 	dx = config.width - config.toolbar-width
     }
     place(dx: if config.toolbar-side == "right" {
-	config.width - config.toolbar-width 
+	config.width - config.toolbar-width
     } else {
 	- config.toolbar-width - 2mm
     },
 	stack(dir: ttb, spacing: 1fr,
-	    grid(..range(0, 12, step: 3).enumerate(start: 1).map(
-		((qtr, mon)) => (
-		    tab(active: "Q"+str(qtr) in active-tabs,
-			link(labelize(calendar.at(mon).first().year, "Q"+str(qtr)))[Q#qtr]
+	    if "quarterly" in config.include {
+		grid(..range(0, 12, step: 3).enumerate(start: 1).map(
+		    ((qtr, mon)) => (
+			tab(active: "Q"+str(qtr) in active-tabs,
+			    link(labelize(calendar.at(mon).first().year, "Q", qtr))[Q#qtr]
+			)
 		    )
-		)
-	    ).map(sideways)),
-	    grid(..calendar.map(month => (
-		tab(active: month.first().name.slice(0, count: 3) in active-tabs,
-		    link(labelize(month.first().year, month.first().name), month.first().name.slice(0, count: 3))
-		)
-	    )).map(sideways))
+		).map(sideways))
+	    },
+	    if "monthly" in config.include {
+		grid(..calendar.map(month => (
+		    tab(active: month.first().name.slice(0, count: 3) in active-tabs,
+			link(labelize(month.first().year, month.first().name), month.first().name.slice(0, count: 3))
+		    )
+		)).map(sideways))
+	    }
 	)
     )
 }
@@ -227,7 +218,7 @@
     let prev_week = 0
     for (i, day) in month.enumerate() {
 	if include-weeks and calc.rem(i, 7) == 0 {
-	    cells.push(link(labelize(day.year + if day.week < prev_week { 1 } else { 0 }, "W" + str(day.week)))[#day.week])
+	    cells.push(link(labelize(day.year + if day.week < prev_week { 1 } else { 0 }, "W", day.week))[#day.week])
 	    prev_week = day.week
 	}
 	if day.month == day.name {
@@ -241,7 +232,7 @@
 		// cells.push(link(labelize(day.year, day.name, day.day))[#grid.cell()[#day.day]])
 	    } else {
 		cells.push(grid.cell()[#day.day])
-	    }	
+	    }
 	} else {
 	    cells.push(none)
 	}
@@ -264,9 +255,6 @@
     // The title will be the year
     let title = fday.year
 
-    /* This is a premature optimization for mid-year use... would need to revamp the quarterly functionality, and since this was mostly for teachers, then the quarters aren't even real quarters, and we would need to define the quarters by date or week number in the config or by command line...
- */
-
     // If the calendar spans a year boundary, use both years as the title.
     let endash = [\u{2013}]
     if fday.year < lday.year {
@@ -279,11 +267,12 @@
 	    topbar(
 		tab(active: true, link(labelize(fday.year))[Calendar]),
 		if "notes" in config.include {
-		    tab(link(labelize("Notes Index"))[Notes])
+
 		},
 	    )
 	)
     )
+    
 
     sidebar()
 
@@ -307,15 +296,21 @@
 #let quarterly-page(qtr, months, prev: none, next: none) = {
     let year = months.at(0).first().year
 
+    // Adding the following, which does nothing physically to the document causes errors: "label `<2024-Q-1>` does not exist in the document
+    // context {
+    // 	let newprev = query(heading.where(level: 1, label: <Quarter>).before(here()), inclusive: false)
+    // 	let newnext = query(heading.where(level: 1, label: <Quarter>).after(here()), inclusive: false)
+    // }
+
     set page(
 	header: header(
-	    page-nav([Q#qtr], lbl: labelize(year, "Q", qtr), prev: prev, next: next),
+	    page-nav([Q#qtr <Quarter>], lbl: labelize(year, "Q", qtr), prev: prev, next: next),
 	    topbar(
 		if "annual" in config.include {
 		    tab(link(labelize(fday.year))[Calendar])
 		},
 		if "notes" in config.include {
-		    tab(link(labelize("Notes Index"))[Notes])
+		    tab(link(labelize("Notes Index-1"))[Notes])
 		},
 	    )
 	)
@@ -364,6 +359,7 @@
 ** Monthly Pages
 */
 
+
 #let monthly-page(month, prev: none, next: none) = {
     let d = month.first()
 
@@ -375,7 +371,7 @@
 		    tab(link(labelize(fday.year))[Calendar])
 		},
 		if "notes" in config.include {
-		    tab(link(labelize("Notes Index"))[Notes])
+		    tab(link(labelize("Notes Index-1"))[Notes])
 		},
 	    )
 	)
@@ -396,7 +392,7 @@
     for (i, day) in month.enumerate() {
 	if calc.rem(i, 7) == 0 and "weekly" in config.include {
 	    // cells.push(link(labelize(day.year + if day.week < prev_week { 1 } else { 0 }, "W" + str(day.week)))[#grid.cell(align: left+horizon, sideways()[Week#hide[-]#day.week])])
-	    cells.push(grid.cell(align: left + horizon, sideways()[#link(labelize(day.year + if day.week < prev_week { 1 } else { 0 }, "W" + str(day.week)))[Week#hide[-]#day.week]]))
+	    cells.push(grid.cell(align: left + horizon, sideways()[#link(labelize(day.year + if day.week < prev_week { 1 } else { 0 }, "W", day.week))[Week#hide[-]#day.week]]))
 	    prev_week = day.week
 	}
 	if day.month == day.name {
@@ -467,7 +463,7 @@
 		    tab(link(labelize(fday.year))[Calendar])
 		},
 		if "notes" in config.include {
-		    tab(link(labelize("Notes Index"))[Notes])
+		    tab(link(labelize("Notes Index-1"))[Notes])
 		},
 	    )
 	)
@@ -511,7 +507,7 @@
 }
 
 #if "weekly" in config.include {
-    let weeks = chunker(calendar.flatten(), 7)
+    let weeks = calendar.flatten().chunks(7)
     let prev = none
     for (i, week) in weeks.enumerate(start: 1) {
 	let curr = week.first()
@@ -531,7 +527,6 @@
 /*
 ** Daily Pages
 */
-
 #let daily-page(day, prev: none, next: none) = {
 
     set page(
@@ -545,12 +540,11 @@
 		    tab(link(labelize(fday.year))[Calendar])
 		},
 		if "notes" in config.include {
-		    tab(link(labelize("Notes Index"))[Notes])
+		    tab(link(labelize("Notes Index-1"))[Notes])
 		},
 	    )
 	)
     )
-
     let quarter = "Q" + str(calc.floor(monthnames.position(mon => {day.name == mon}) / 3 + 1))
     sidebar(active-tabs: (quarter, day.name.slice(0, count: 3)))
 
@@ -609,8 +603,8 @@
 		    #let current_y = loc.position().y
 		    #let remaining_space = config.height - current_y - config.margin * 2 // can't subtract the top-margin because it's in em units...
 		    #let lines_num = int(remaining_space / config.fontsize / 2)
-		    #for i in range(lines_num) {
-			linebreak()
+		    #for i in range(lines_num - 1) {
+			hide([#(i+1)])
 			linebreak()
 			box(ruleline())
 		    }
@@ -627,19 +621,66 @@
     pagebreak()
 }
 
+/*
+** Daily Notes Pages
+*/
+
+#let daily-note-page(day, prev: none, next: none) = {
+
+    set page(
+	header: header(
+	    page-nav([#day.day], lbl: labelize(day.year, day.month, day.day, "Notes"), subtitle: (top: [#day.weekday], bottom: [#day.month]), prev: prev, next: next, title-loc: labelize(day.year, day.month, day.day)),
+	    topbar(
+		if "weekly" in config.include {
+		    tab(link(labelize(day.year, "W", day.week))[Week #day.week])
+		},
+		if "annual" in config.include {
+		    tab(link(labelize(fday.year))[Calendar])
+		},
+		if "notes" in config.include {
+		    tab(link(labelize("Notes Index-1"))[Notes])
+		},
+	    )
+	)
+    )
+
+    let quarter = "Q" + str(calc.floor(monthnames.position(mon => {day.name == mon}) / 3 + 1))
+    sidebar(active-tabs: (quarter, day.name.slice(0, count: 3)))
+
+    locate(loc => [
+	#let current_y = loc.position().y
+	#let remaining_space = config.height - current_y - config.margin * 2 // can't subtract the top-margin because it's in em units...
+	#let lines_num = int(remaining_space / config.fontsize / 2) + 1
+	#for i in range(lines_num) {
+	    linebreak()
+	    linebreak()
+	    box(ruleline())
+	}])
+
+        pagebreak()
+}
+
 #if "daily" in config.include {
-    let days = calendar.flatten().filter(day => day.name == day.month).slice(0, 5)
+    let days = calendar.flatten().filter(day => day.name == day.month).slice(0, 2)
     let prev = none
     for (i, day) in days.enumerate(start: 1) {
 	let next = days.at(i, default: none)
-	[#daily-page(day,
-	    prev: if prev != none {labelize(prev.year, prev.month, prev.day)},
-	    next: if next != none {labelize(next.year, next.month, next.day)}
-	)]
-	prev = day	
+	daily-page(day,
+	    prev: if prev != none { labelize(prev.year, prev.month, prev.day) },
+	    next: if next != none { labelize(next.year, next.month, next.day) }
+	)
+	prev = day
+    }
+    prev = none
+    for (i, day) in days.enumerate(start: 1) {
+	let next = days.at(i, default: none)
+    	daily-note-page(day,
+	    prev: if prev != none { labelize(prev.year, prev.month, prev.day, "Notes") },
+	    next: if next != none { labelize(next.year, next.month, next.day, "Notes") }
+	)
+	prev = day
     }
 }
-
 
 /*
 ** Daily Reflection Pages
@@ -649,7 +690,7 @@
 
     set page(
 	header: header(
-	    page-nav([#day.day], lbl: labelize(day.year, day.month, day.day, "Reflect"), subtitle: (top: [#day.weekday], bottom: [#day.month]), prev: prev, next: next, title-loc: labelize(day.year, day.month)), // adding day.day causes a failure...
+	    page-nav([#day.day], lbl: labelize(day.year, day.month, day.day, "Reflect"), subtitle: (top: [#day.weekday], bottom: [#day.month]), prev: prev, next: next, title-loc: labelize(day.year, day.month, day.day)),
 	    topbar(
 		if "weekly" in config.include {
 		    tab(link(labelize(day.year, "W", day.week))[Week #day.week])
@@ -658,7 +699,7 @@
 		    tab(link(labelize(fday.year))[Calendar])
 		},
 		if "notes" in config.include {
-		    tab(link(labelize("Notes Index"))[Notes])
+		    tab(link(labelize("Notes Index-1"))[Notes])
 		},
 	    )
 	)
@@ -671,7 +712,7 @@
 	prompt
 	box(line(length: 100%, stroke: 1pt))
 	for i in range(config.reflection-prompt-lines) {
-	    linebreak()
+	    hide([#1])
 	    linebreak()
 	    box(ruleline())
 	}
@@ -683,8 +724,8 @@
 	#let current_y = loc.position().y
 	#let remaining_space = config.height - current_y - config.margin * 2 // can't subtract the top-margin because it's in em units...
 	#let lines_num = int(remaining_space / config.fontsize / 2) + 1
-	#for i in range(lines_num) {
-	    linebreak()
+	#for i in range(lines_num - 1) {
+	    hide([#1])
 	    linebreak()
 	    box(ruleline())
 	}])
@@ -693,7 +734,7 @@
 }
 
 #if "reflections" in config.include {
-    let days = calendar.flatten().filter(day => day.name == day.month).slice(0, 5)
+    let days = calendar.flatten().filter(day => day.name == day.month).slice(0, 2)
     let prev = none
     for (i, day) in days.enumerate(start: 1) {
 	let next = days.at(i, default: none)
@@ -706,88 +747,141 @@
 }
 
 /*
-** Daily Notes Pages
-*/
-
-#let daily-note-page(day, prev: none, next: none) = {
-
-    set page(
-	header: header(
-	    page-nav([#day.day], lbl: labelize(day.year, day.month, day.day, "Notes"), subtitle: (top: [#day.weekday], bottom: [#day.month]), prev: prev, next: next),
-	    topbar(
-		if "weekly" in config.include {
-		    tab(link(labelize(day.year, "W", day.week))[Week #day.week])
-		},
-		if "annual" in config.include {
-		    tab(link(labelize(fday.year))[Calendar])
-		},
-		if "notes" in config.include {
-		    tab(link(labelize("Notes Index"))[Notes])
-		},
-	    )
-	)
-    )
-
-    let quarter = "Q" + str(calc.floor(monthnames.position(mon => {day.name == mon}) / 3 + 1))
-    sidebar(active-tabs: (quarter, day.name.slice(0, count: 3)))
-
-    locate(loc => [
-	#let current_y = loc.position().y
-	#let remaining_space = config.height - current_y - config.margin * 2 // can't subtract the top-margin because it's in em units...
-	#let lines_num = int(remaining_space / config.fontsize / 2) + 1
-	#for i in range(lines_num) {
-	    linebreak()
-	    linebreak()
-	    box(ruleline())
-	}])
-
-        pagebreak()
-}
-
-#if "daily" in config.include {
-    let days = calendar.flatten().filter(day => day.name == day.month).slice(0, 5)
-    let prev = none
-    for (i, day) in days.enumerate(start: 1) {
-	let next = days.at(i, default: none)
-	daily-note-page(day,
-	    prev: if prev != none { labelize(prev.year, prev.month, prev.day, "Notes") },
-	    next: if next != none { labelize(next.year, next.month, next.day, "Notes") }
-	)
-	prev = day
-    }
-}
-
-/*
 ** Notes
 **
 ** The number of note pages depends on how many index lines
 ** fit on the index pages.
 */
-#let notes(index-pages: 1) = {
+#let d = counter("note")
 
-        set page(
+#let index-page(page-num: none, prev: none, next: none) = {
+
+    set page(
 	header: header(
-	    page-nav([Index Notes], lbl: labelize(day.year, day.month, day.day, "Notes"), subtitle: (top: [#day.weekday], bottom: [#day.month])),
+	    page-nav([Notes Index], lbl: labelize("Notes Index", page-num),
+		prev: if prev != none { labelize("Notes Index", prev) },
+		next: if next != none { labelize("Notes Index", next) },
+	    ),
 	    topbar(
-		if "weekly" in config.include {
-		    tab(link(labelize(day.year, "W", day.week))[Week #day.week])
-		},
 		if "annual" in config.include {
 		    tab(link(labelize(fday.year))[Calendar])
 		},
 		if "notes" in config.include {
-		    tab(link(labelize("Notes Index"))[Notes])
+		    tab(active: page-num == 1, link(labelize("Notes Index" , 1))[Notes])
 		},
 	    )
 	)
     )
 
-    for i in range(index-pages) {
+    sidebar()
+
+    locate(loc => {
+    	let current_y = loc.position().y
+    	let remaining_space = config.height - current_y - config.margin * 2
+    	let lines_num = int(remaining_space / config.fontsize / 2)
+    	for i in range(lines_num) {
+	    d.step()
+	    // context {
+	    // 	link(labelize("Note", d.get()))[#d.get()]
+	    // }
+	    context {
+		link(labelize("Note", d.get().first()))[#box(width: 1.5em)[#align(right)[#d.get().first()]]]
+	    }
+    	    linebreak()
+    	    box(ruleline())
+    	}})
+
+    pagebreak()
+}
+
+#let note-page(page-num: 1, prev: none, next: none, thing: none) = {
+
+    set page(
+	header: header(
+	    page-nav([Note #page-num], lbl: labelize("Note", page-num),
+		prev: if prev != none { labelize("Note", prev) },
+		next: if next != none { labelize("Note", next) },
+	    ),
+	    topbar(
+		if "annual" in config.include {
+		    tab(link(labelize(fday.year))[Calendar])
+		},
+		if "notes" in config.include {
+		    tab(link(labelize("Notes Index", 1))[Notes])
+		},
+	    )
+	)
+    )
+
+    sidebar()
+
+    locate(loc => {
+    	let current_y = loc.position().y
+    	let remaining_space = config.height - current_y - config.margin * 2 // can't subtract the top-margin because it's in em units...
+    	let lines_num = int(remaining_space / config.fontsize / 2)
+    	for i in range(lines_num) {
+	    // [#context d.display()]
+    	    // link(labelize("Note", i + j + 1))[#(i + j + 1)]
+	    linebreak()
+    	    linebreak()
+    	    box(ruleline())
+    	}})
+
+    pagebreak()
+}
+
+#if "notes" in config.include {
+    let page-count = 3
+    if "note-index-pages" in config {
+	page-count = config.note-index-pages
+    }
+    let prev = none
+    let next = none
+    for i in range(1, page-count + 1) {
+	if i < page-count { next = i + 1 } else { next = none }
+	index-page(page-num: i, prev: prev, next: next)
+	prev = i
+    }
+
+    // context {
+    // 	let next = none
+    // 	let prev = none
+    // 	let notes-count = d.final().at(0)
+    // 	for i in range(1, notes-count + 1) {
+    // 	    if i < notes-count { next = i + 1 } else { next = none }
+    // 	    note-page(page-num: i, prev: prev, next: next)
+    // 	    prev = i
+    // 	}
+    // }
+    context {
+	let prev = none
+	let next = none
+	let total = d.final().at(0)
+	for i in range(1, total + 1) {
+	    if i < total { next = i + 1 } else { next = none }
+	    header(
+		page-nav([Note #i], lbl: labelize("Note", i),
+		    prev: if prev != none { labelize("Note", prev) },
+		    next: if next != none { labelize("Note", next) },
+		),
+	    	topbar(
+		    if "annual" in config.include {
+			tab(link(labelize(fday.year))[Calendar])
+		    },
+		    if "notes" in config.include {
+			tab(link(labelize("Notes Index", 1))[Notes])
+		    },
+		)
+	    )
+	    sidebar()
+
+	    [
+		= Note #i #labelize("DupeNote", i)
+		== Prev is #prev
+		== Next is #next
+	    ]
+	    prev = i
+	    pagebreak()
+	}
     }
 }
-// 3 pages, 01-114
-
-/*
-** Note Pages
-*/
-// 114 pages...
